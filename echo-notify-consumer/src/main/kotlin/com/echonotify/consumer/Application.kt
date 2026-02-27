@@ -6,6 +6,7 @@ import com.echonotify.core.application.service.BackoffCalculator
 import com.echonotify.core.application.service.NotificationChannelRegistry
 import com.echonotify.core.application.usecase.ProcessNotificationUseCase
 import com.echonotify.core.infrastructure.config.DatabaseFactory
+import com.echonotify.core.infrastructure.messaging.KafkaClientFactory
 import com.echonotify.core.infrastructure.messaging.KafkaNotificationPublisher
 import com.echonotify.core.infrastructure.messaging.NotificationMessage
 import com.echonotify.core.infrastructure.messaging.toDomain
@@ -17,16 +18,13 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
-import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer.KafkaProducer
-import org.apache.kafka.clients.producer.ProducerConfig
-import org.apache.kafka.common.serialization.StringDeserializer
-import org.apache.kafka.common.serialization.StringSerializer
+import org.slf4j.LoggerFactory
 import java.time.Duration
-import java.util.Properties
 
 fun main() = runBlocking {
+    val log = LoggerFactory.getLogger("EchoNotifyConsumer")
     val config = com.typesafe.config.ConfigFactory.load()
 
     val jdbcUrl = config.getString("echo-notify.database.url")
@@ -39,20 +37,13 @@ fun main() = runBlocking {
     val database = DatabaseFactory.create(jdbcUrl, dbUser, dbPass)
     val repository = PostgresNotificationRepository(database)
 
-    val producer = KafkaProducer<String, String>(
-        mapOf(
-            ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers,
-            ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
-            ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
-            ProducerConfig.ACKS_CONFIG to "all",
-            ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG to true
-        )
-    )
+    val producer = KafkaProducer<String, String>(KafkaClientFactory.producerProps(bootstrapServers))
     val publisher = KafkaNotificationPublisher(producer)
+    val httpClient = HttpClient(CIO)
 
     val channels = listOf(
         CircuitBreakerNotificationChannel(EmailNotificationChannel(Json)),
-        CircuitBreakerNotificationChannel(WebhookNotificationChannel(HttpClient(CIO), Json))
+        CircuitBreakerNotificationChannel(WebhookNotificationChannel(httpClient, Json))
     )
 
     val useCase = ProcessNotificationUseCase(
@@ -63,27 +54,43 @@ fun main() = runBlocking {
         maxAttempts = maxAttempts
     )
 
-    val consumerProps = Properties().apply {
-        put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers)
-        put(ConsumerConfig.GROUP_ID_CONFIG, groupId)
-        put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer::class.java)
-        put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer::class.java)
-        put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-        put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
-        put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed")
-    }
-
-    val kafkaConsumer = KafkaConsumer<String, String>(consumerProps)
+    val kafkaConsumer = KafkaConsumer<String, String>(KafkaClientFactory.consumerProps(bootstrapServers, groupId))
     kafkaConsumer.subscribe(listOf(TopicNames.SEND))
 
-    while (true) {
-        val records = kafkaConsumer.poll(Duration.ofMillis(500))
-        records.forEach { record ->
-            runCatching {
-                val message = Json.decodeFromString<NotificationMessage>(record.value())
-                useCase.execute(message.toDomain())
+    Runtime.getRuntime().addShutdownHook(Thread {
+        log.info("Shutting down consumer resources")
+        runCatching { kafkaConsumer.wakeup() }
+        runCatching { kafkaConsumer.close() }
+        runCatching { producer.close() }
+        runCatching { httpClient.close() }
+    })
+
+    try {
+        while (true) {
+            val records = kafkaConsumer.poll(Duration.ofMillis(500))
+            var processedAll = true
+            for (record in records) {
+                val result = runCatching {
+                    val message = Json.decodeFromString<NotificationMessage>(record.value())
+                    useCase.execute(message.toDomain())
+                }
+
+                if (result.isFailure) {
+                    processedAll = false
+                    log.error("Failed to process record key={} topic={}", record.key(), record.topic(), result.exceptionOrNull())
+                    break
+                }
+            }
+
+            if (processedAll && records.count() > 0) {
+                kafkaConsumer.commitSync()
             }
         }
-        kafkaConsumer.commitSync()
+    } catch (ex: Exception) {
+        log.warn("Consumer loop interrupted", ex)
+    } finally {
+        kafkaConsumer.close()
+        producer.close()
+        httpClient.close()
     }
 }

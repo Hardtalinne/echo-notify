@@ -8,7 +8,6 @@ import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
@@ -20,22 +19,20 @@ class PostgresNotificationRepository(
 ) : NotificationRepository {
 
     override suspend fun save(notification: Notification): Notification = newSuspendedTransaction(Dispatchers.IO, database) {
-        val exists = NotificationTable.selectAll().where { NotificationTable.id eq notification.id }.count() > 0
-        if (exists) {
-            NotificationTable.update({ NotificationTable.id eq notification.id }) {
-                it[type] = notification.type.name
-                it[recipient] = notification.recipient
-                it[clientId] = notification.clientId
-                it[payload] = notification.payload
-                it[idempotencyKey] = notification.idempotencyKey
-                it[status] = notification.status.name
-                it[retryCount] = notification.retryCount
-                it[errorMessage] = notification.errorMessage
-                it[nextRetryAt] = notification.nextRetryAt
-                it[createdAt] = notification.createdAt
-                it[updatedAt] = notification.updatedAt
-            }
-        } else {
+        val updatedRows = NotificationTable.update({ NotificationTable.id eq notification.id }) {
+            it[type] = notification.type.name
+            it[recipient] = notification.recipient
+            it[clientId] = notification.clientId
+            it[payload] = notification.payload
+            it[idempotencyKey] = notification.idempotencyKey
+            it[status] = notification.status.name
+            it[retryCount] = notification.retryCount
+            it[errorMessage] = notification.errorMessage
+            it[nextRetryAt] = notification.nextRetryAt
+            it[updatedAt] = notification.updatedAt
+        }
+
+        if (updatedRows == 0) {
             NotificationTable.insert {
                 it[id] = notification.id
                 it[type] = notification.type.name
