@@ -6,4 +6,4 @@ Use Ktor as backend framework.
 ## Why
 - Kotlin-native and coroutines-first
 - Lower overhead and explicit wiring
-- Strong portfolio signal for advanced Kotlin backend
+- Better fit for lightweight modular services (`api`, `consumer`, `worker`)
