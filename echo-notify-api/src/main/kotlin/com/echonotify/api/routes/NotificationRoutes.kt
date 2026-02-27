@@ -11,6 +11,7 @@ import com.echonotify.api.security.ApiScopes
 import com.echonotify.api.security.ApiSecurity
 import com.echonotify.api.security.AuthorizationResult
 import com.echonotify.api.security.apiKeyHeader
+import com.echonotify.api.security.bearerTokenHeader
 import com.echonotify.api.security.clientIdHeader
 import com.echonotify.core.application.usecase.CreateNotificationCommand
 import com.echonotify.core.application.usecase.QueryNotificationStatusUseCase
@@ -41,6 +42,7 @@ fun Route.notificationRoutes(
             when (
                 apiSecurity.authorize(
                     apiKey = call.apiKeyHeader(),
+                    bearerToken = call.bearerTokenHeader(),
                     requiredScope = ApiScopes.CREATE,
                     expectedClientId = request.clientId
                 )
@@ -103,6 +105,7 @@ fun Route.notificationRoutes(
             when (
                 apiSecurity.authorize(
                     apiKey = call.apiKeyHeader(),
+                    bearerToken = call.bearerTokenHeader(),
                     requiredScope = ApiScopes.READ,
                     expectedClientId = callerClientId
                 )
@@ -167,6 +170,7 @@ fun Route.notificationRoutes(
             when (
                 apiSecurity.authorize(
                     apiKey = call.apiKeyHeader(),
+                    bearerToken = call.bearerTokenHeader(),
                     requiredScope = ApiScopes.DLQ_REPROCESS,
                     expectedClientId = null
                 )

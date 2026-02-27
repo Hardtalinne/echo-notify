@@ -17,6 +17,7 @@ junit = "5.10.3"
 mockk = "1.13.12"
 testcontainers = "1.20.1"
 coroutines = "1.8.1"
+jwt = "4.4.0"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -63,6 +64,7 @@ koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
+java-jwt = { module = "com.auth0:java-jwt", version.ref = "jwt" }
 
 testcontainers-junit = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
 testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
