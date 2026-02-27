@@ -6,6 +6,7 @@ import com.echonotify.api.dto.EmailPayloadContract
 import com.echonotify.api.dto.NotificationStatusResponse
 import com.echonotify.api.dto.NotificationPayloadContract
 import com.echonotify.api.dto.WebhookPayloadContract
+import com.echonotify.api.error.respondProblem
 import com.echonotify.api.security.ApiScopes
 import com.echonotify.api.security.ApiSecurity
 import com.echonotify.api.security.AuthorizationResult
@@ -45,12 +46,22 @@ fun Route.notificationRoutes(
                 )
             ) {
                 AuthorizationResult.Unauthorized -> {
-                    call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "missing or invalid api key"))
+                    call.respondProblem(
+                        status = HttpStatusCode.Unauthorized,
+                        title = "Unauthorized",
+                        detail = "missing or invalid api key",
+                        code = "AUTH_UNAUTHORIZED"
+                    )
                     return@post
                 }
 
                 AuthorizationResult.Forbidden -> {
-                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "insufficient scope or client mismatch"))
+                    call.respondProblem(
+                        status = HttpStatusCode.Forbidden,
+                        title = "Forbidden",
+                        detail = "insufficient scope or client mismatch",
+                        code = "AUTH_FORBIDDEN"
+                    )
                     return@post
                 }
 
@@ -81,7 +92,12 @@ fun Route.notificationRoutes(
         get("/{id}") {
             val callerClientId = call.clientIdHeader()
             if (callerClientId.isNullOrBlank()) {
-                call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "missing X-Client-Id header"))
+                call.respondProblem(
+                    status = HttpStatusCode.Unauthorized,
+                    title = "Unauthorized",
+                    detail = "missing X-Client-Id header",
+                    code = "AUTH_MISSING_CLIENT_ID"
+                )
                 return@get
             }
             when (
@@ -92,12 +108,22 @@ fun Route.notificationRoutes(
                 )
             ) {
                 AuthorizationResult.Unauthorized -> {
-                    call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "missing or invalid api key"))
+                    call.respondProblem(
+                        status = HttpStatusCode.Unauthorized,
+                        title = "Unauthorized",
+                        detail = "missing or invalid api key",
+                        code = "AUTH_UNAUTHORIZED"
+                    )
                     return@get
                 }
 
                 AuthorizationResult.Forbidden -> {
-                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "insufficient scope or client mismatch"))
+                    call.respondProblem(
+                        status = HttpStatusCode.Forbidden,
+                        title = "Forbidden",
+                        detail = "insufficient scope or client mismatch",
+                        code = "AUTH_FORBIDDEN"
+                    )
                     return@get
                 }
 
@@ -107,11 +133,21 @@ fun Route.notificationRoutes(
             val id = UUID.fromString(requireNotNull(call.parameters["id"]))
             val data = queryNotificationStatusUseCase.execute(id)
             if (data == null) {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to "notification not found"))
+                call.respondProblem(
+                    status = HttpStatusCode.NotFound,
+                    title = "Not Found",
+                    detail = "notification not found",
+                    code = "NOTIFICATION_NOT_FOUND"
+                )
                 return@get
             }
             if (data.clientId != callerClientId) {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to "notification not found"))
+                call.respondProblem(
+                    status = HttpStatusCode.NotFound,
+                    title = "Not Found",
+                    detail = "notification not found",
+                    code = "NOTIFICATION_NOT_FOUND"
+                )
                 return@get
             }
             call.respond(
@@ -136,12 +172,22 @@ fun Route.notificationRoutes(
                 )
             ) {
                 AuthorizationResult.Unauthorized -> {
-                    call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "missing or invalid api key"))
+                    call.respondProblem(
+                        status = HttpStatusCode.Unauthorized,
+                        title = "Unauthorized",
+                        detail = "missing or invalid api key",
+                        code = "AUTH_UNAUTHORIZED"
+                    )
                     return@post
                 }
 
                 AuthorizationResult.Forbidden -> {
-                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "insufficient scope"))
+                    call.respondProblem(
+                        status = HttpStatusCode.Forbidden,
+                        title = "Forbidden",
+                        detail = "insufficient scope",
+                        code = "AUTH_FORBIDDEN"
+                    )
                     return@post
                 }
 

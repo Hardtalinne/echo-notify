@@ -2,6 +2,7 @@ package com.echonotify.api
 
 import com.echonotify.api.routes.healthRoutes
 import com.echonotify.api.routes.notificationRoutes
+import com.echonotify.api.error.respondProblem
 import com.echonotify.api.security.ApiSecurity
 import com.echonotify.core.application.usecase.QueryNotificationStatusUseCase
 import com.echonotify.core.application.usecase.ReprocessDlqUseCase
@@ -17,7 +18,6 @@ import io.ktor.server.metrics.micrometer.MicrometerMetrics
 import io.ktor.server.plugins.callloging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
-import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
@@ -51,8 +51,22 @@ fun Application.module() {
     install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
     install(CallLogging)
     install(StatusPages) {
+        exception<IllegalArgumentException> { call, cause ->
+            call.respondProblem(
+                status = io.ktor.http.HttpStatusCode.BadRequest,
+                title = "Bad Request",
+                detail = cause.message ?: "invalid request",
+                code = "VALIDATION_ERROR"
+            )
+        }
+
         exception<Throwable> { call, cause ->
-            call.respond(io.ktor.http.HttpStatusCode.BadRequest, mapOf("error" to (cause.message ?: "unexpected error")))
+            call.respondProblem(
+                status = io.ktor.http.HttpStatusCode.InternalServerError,
+                title = "Internal Server Error",
+                detail = "unexpected error",
+                code = "UNEXPECTED_ERROR"
+            )
         }
     }
 
