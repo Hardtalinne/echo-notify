@@ -1,4 +1,4 @@
-FROM gradle:8.9-jdk21 AS build
+FROM gradle:8.9-jdk11 AS build
 WORKDIR /workspace
 COPY . .
 RUN gradle :echo-notify-worker:installDist --no-daemon
