@@ -1,15 +1,22 @@
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: echo_notify
       POSTGRES_USER: echo
       POSTGRES_PASSWORD: echo
     ports:
       - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U echo -d echo_notify" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   kafka:
     image: bitnami/kafka:3.7
+    restart: unless-stopped
     ports:
       - "9092:9092"
     environment:
@@ -21,29 +28,38 @@ services:
       - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - ALLOW_PLAINTEXT_LISTENER=yes
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1" ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
 
   kafka-init-topics:
     image: bitnami/kafka:3.7
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     entrypoint: ["/bin/bash", "/scripts/init-topics.sh"]
     volumes:
       - ./docker/kafka/init-topics.sh:/scripts/init-topics.sh
 
   mailhog:
     image: mailhog/mailhog:latest
+    restart: unless-stopped
     ports:
       - "8025:8025"
       - "1025:1025"
 
   jaeger:
     image: jaegertracing/all-in-one:1.58
+    restart: unless-stopped
     ports:
       - "16686:16686"
       - "4317:4317"
 
   prometheus:
     image: prom/prometheus:v2.53.1
+    restart: unless-stopped
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
@@ -51,6 +67,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.1.4
+    restart: unless-stopped
     ports:
       - "3000:3000"
     volumes:
@@ -61,24 +78,44 @@ services:
     build:
       context: .
       dockerfile: echo-notify-api/Dockerfile
+    restart: unless-stopped
     depends_on:
-      - postgres
-      - kafka
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init-topics:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
 
   echo-notify-consumer:
     build:
       context: .
       dockerfile: echo-notify-consumer/Dockerfile
+    restart: unless-stopped
     depends_on:
-      - postgres
-      - kafka
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init-topics:
+        condition: service_completed_successfully
 
   echo-notify-worker:
     build:
       context: .
       dockerfile: echo-notify-worker/Dockerfile
+    restart: unless-stopped
     depends_on:
-      - postgres
-      - kafka
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init-topics:
+        condition: service_completed_successfully
