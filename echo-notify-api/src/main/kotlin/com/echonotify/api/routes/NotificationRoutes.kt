@@ -53,7 +53,10 @@ fun Route.notificationRoutes(
                     id = data.id.toString(),
                     status = data.status.name,
                     retryCount = data.retryCount,
-                    errorMessage = data.errorMessage
+                    errorMessage = data.errorMessage,
+                    errorCode = data.errorCode,
+                    errorCategory = data.errorCategory,
+                    retryable = data.retryable
                 )
             )
         }

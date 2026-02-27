@@ -4,13 +4,18 @@ import com.echonotify.core.application.port.RateLimiterPort
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-class ResilienceRateLimiterAdapter : RateLimiterPort {
+class ResilienceRateLimiterAdapter(
+    private val limitPerSecondByPrefix: Map<String, Int> = mapOf(
+        "type" to 100,
+        "recipient" to 60,
+        "client" to 200
+    )
+) : RateLimiterPort {
     private data class WindowCounter(
         val count: AtomicInteger,
         @Volatile var windowStartMillis: Long
     )
 
-    private val limitPerSecond = 100
     private val counters = ConcurrentHashMap<String, WindowCounter>()
 
     override fun isAllowed(key: String): Boolean {
@@ -26,7 +31,9 @@ class ResilienceRateLimiterAdapter : RateLimiterPort {
             }
 
             val current = state.count.incrementAndGet()
-            return current <= limitPerSecond
+            val prefix = key.substringBefore(':', missingDelimiterValue = "client")
+            val limit = limitPerSecondByPrefix[prefix] ?: 100
+            return current <= limit
         }
     }
 }

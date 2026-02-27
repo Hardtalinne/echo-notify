@@ -1,11 +1,11 @@
 package com.echonotify.core.application.usecase
 
-import com.echonotify.core.application.port.NotificationPublisherPort
 import com.echonotify.core.application.port.RateLimiterPort
 import com.echonotify.core.domain.model.Notification
 import com.echonotify.core.domain.model.NotificationStatus
 import com.echonotify.core.domain.model.NotificationType
 import com.echonotify.core.domain.port.NotificationRepository
+import com.echonotify.core.infrastructure.resilience.InMemoryIdempotencyLockAdapter
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -17,16 +17,16 @@ import org.junit.jupiter.api.Test
 class SendNotificationUseCaseTest {
 
     @Test
-    fun `should publish notification when idempotency key does not exist`() = runBlocking {
+    fun `should enqueue notification outbox when idempotency key does not exist`() = runBlocking {
         val repository = mockk<NotificationRepository>()
-        val publisher = mockk<NotificationPublisherPort>(relaxed = true)
         val rateLimiter = mockk<RateLimiterPort>()
+        val idempotencyLock = InMemoryIdempotencyLockAdapter()
 
         every { rateLimiter.isAllowed(any()) } returns true
         coEvery { repository.findByIdempotencyKey("idem-1") } returns null
-        coEvery { repository.save(any()) } answers { firstArg() }
+        coEvery { repository.saveWithOutbox(any(), any()) } answers { firstArg() }
 
-        val useCase = SendNotificationUseCase(repository, publisher, rateLimiter)
+        val useCase = SendNotificationUseCase(repository, rateLimiter, idempotencyLock)
         val created = useCase.execute(
             CreateNotificationCommand(
                 type = NotificationType.EMAIL,
@@ -38,14 +38,14 @@ class SendNotificationUseCaseTest {
         )
 
         assertEquals(NotificationStatus.PENDING, created.status)
-        coVerify(exactly = 1) { publisher.publish(any(), any()) }
+        coVerify(exactly = 1) { repository.saveWithOutbox(any(), any()) }
     }
 
     @Test
     fun `should return existing notification for duplicated idempotency key`() = runBlocking {
         val repository = mockk<NotificationRepository>()
-        val publisher = mockk<NotificationPublisherPort>(relaxed = true)
         val rateLimiter = mockk<RateLimiterPort>()
+        val idempotencyLock = InMemoryIdempotencyLockAdapter()
 
         val existing = Notification(
             type = NotificationType.EMAIL,
@@ -57,7 +57,7 @@ class SendNotificationUseCaseTest {
 
         coEvery { repository.findByIdempotencyKey("idem-1") } returns existing
 
-        val useCase = SendNotificationUseCase(repository, publisher, rateLimiter)
+        val useCase = SendNotificationUseCase(repository, rateLimiter, idempotencyLock)
         val result = useCase.execute(
             CreateNotificationCommand(
                 type = NotificationType.EMAIL,
@@ -69,6 +69,6 @@ class SendNotificationUseCaseTest {
         )
 
         assertEquals(existing.id, result.id)
-        coVerify(exactly = 0) { publisher.publish(any(), any()) }
+        coVerify(exactly = 0) { repository.saveWithOutbox(any(), any()) }
     }
 }

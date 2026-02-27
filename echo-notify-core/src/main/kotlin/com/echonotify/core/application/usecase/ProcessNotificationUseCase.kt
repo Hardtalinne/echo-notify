@@ -12,8 +12,7 @@ class ProcessNotificationUseCase(
     private val repository: NotificationRepository,
     private val registry: NotificationChannelRegistry,
     private val publisher: NotificationPublisherPort,
-    private val backoffCalculator: BackoffCalculator,
-    private val maxAttempts: Int
+    private val backoffCalculator: BackoffCalculator
 ) {
     suspend fun execute(notification: Notification) {
         val channel = registry.find(notification.type)
@@ -25,6 +24,9 @@ class ProcessNotificationUseCase(
                     status = NotificationStatus.SENT,
                     updatedAt = java.time.Instant.now(),
                     errorMessage = null,
+                    errorCode = null,
+                    errorCategory = null,
+                    retryable = null,
                     nextRetryAt = null
                 )
             )
@@ -32,12 +34,17 @@ class ProcessNotificationUseCase(
         }
 
         val nextCount = notification.retryCount + 1
-        if (nextCount >= maxAttempts) {
+        val causeMessage = result.exceptionOrNull()?.message
+        val retryable = true
+        if (nextCount >= backoffCalculator.maxAttempts(notification.type)) {
             val dlqItem = repository.save(
                 notification.copy(
                     status = NotificationStatus.DEAD_LETTERED,
                     retryCount = nextCount,
-                    errorMessage = result.exceptionOrNull()?.message,
+                    errorMessage = causeMessage,
+                    errorCode = "DELIVERY_FAILED_MAX_ATTEMPTS",
+                    errorCategory = "DELIVERY",
+                    retryable = false,
                     updatedAt = java.time.Instant.now()
                 )
             )
@@ -49,8 +56,11 @@ class ProcessNotificationUseCase(
             notification.copy(
                 status = NotificationStatus.FAILED,
                 retryCount = nextCount,
-                errorMessage = result.exceptionOrNull()?.message,
-                nextRetryAt = backoffCalculator.nextRetryAt(nextCount),
+                errorMessage = causeMessage,
+                errorCode = "DELIVERY_FAILED_RETRYABLE",
+                errorCategory = "DELIVERY",
+                retryable = retryable,
+                nextRetryAt = backoffCalculator.nextRetryAt(notification.type, nextCount),
                 updatedAt = java.time.Instant.now()
             )
         )

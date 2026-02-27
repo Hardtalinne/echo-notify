@@ -1,0 +1,4 @@
+ALTER TABLE notifications
+    ADD COLUMN IF NOT EXISTS error_code VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS error_category VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS retryable BOOLEAN;

@@ -22,5 +22,8 @@ data class NotificationStatusResponse(
     val id: String,
     val status: String,
     val retryCount: Int,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val errorCode: String? = null,
+    val errorCategory: String? = null,
+    val retryable: Boolean? = null
 )

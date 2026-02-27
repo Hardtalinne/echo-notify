@@ -21,6 +21,9 @@ data class NotificationRecord(
     val status: String,
     val retryCount: Int,
     val errorMessage: String? = null,
+    val errorCode: String? = null,
+    val errorCategory: String? = null,
+    val retryable: Boolean? = null,
     val nextRetryAt: String? = null,
     val createdAt: String,
     val updatedAt: String
@@ -36,6 +39,9 @@ fun Notification.toRecord(): NotificationRecord = NotificationRecord(
     status = status.name,
     retryCount = retryCount,
     errorMessage = errorMessage,
+    errorCode = errorCode,
+    errorCategory = errorCategory,
+    retryable = retryable,
     nextRetryAt = nextRetryAt?.toString(),
     createdAt = createdAt.toString(),
     updatedAt = updatedAt.toString()

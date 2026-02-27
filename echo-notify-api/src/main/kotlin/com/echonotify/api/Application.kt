@@ -8,10 +8,8 @@ import com.echonotify.core.application.usecase.SendNotificationUseCase
 import com.echonotify.core.infrastructure.config.DatabaseFactory
 import com.echonotify.core.infrastructure.messaging.KafkaClientFactory
 import com.echonotify.core.infrastructure.messaging.KafkaNotificationPublisher
-import com.echonotify.core.infrastructure.notification.email.EmailNotificationChannel
-import com.echonotify.core.infrastructure.notification.webhook.WebhookNotificationChannel
 import com.echonotify.core.infrastructure.persistence.PostgresNotificationRepository
-import com.echonotify.core.infrastructure.resilience.CircuitBreakerNotificationChannel
+import com.echonotify.core.infrastructure.resilience.InMemoryIdempotencyLockAdapter
 import com.echonotify.core.infrastructure.resilience.ResilienceRateLimiterAdapter
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -27,7 +25,10 @@ import io.ktor.server.routing.routing
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import kotlinx.serialization.json.Json
+import org.apache.kafka.clients.admin.AdminClient
+import org.apache.kafka.clients.admin.AdminClientConfig
 import org.apache.kafka.clients.producer.KafkaProducer
+import java.util.concurrent.TimeUnit
 
 fun Application.module() {
     val config = environment.config
@@ -40,17 +41,20 @@ fun Application.module() {
     val repository = PostgresNotificationRepository(database)
 
     val producer = KafkaProducer<String, String>(KafkaClientFactory.producerProps(bootstrapServers))
-
-    val publisher = KafkaNotificationPublisher(producer)
-    val rateLimiter = ResilienceRateLimiterAdapter()
+    val adminClient = AdminClient.create(mapOf(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers))
     val httpClient = HttpClient(CIO)
 
-    listOf(
-        CircuitBreakerNotificationChannel(EmailNotificationChannel(Json)),
-        CircuitBreakerNotificationChannel(WebhookNotificationChannel(httpClient, Json))
+    val publisher = KafkaNotificationPublisher(producer)
+    val rateLimiter = ResilienceRateLimiterAdapter(
+        limitPerSecondByPrefix = mapOf(
+            "type" to (config.propertyOrNull("echo-notify.rateLimit.type")?.getString()?.toInt() ?: 100),
+            "recipient" to (config.propertyOrNull("echo-notify.rateLimit.recipient")?.getString()?.toInt() ?: 60),
+            "client" to (config.propertyOrNull("echo-notify.rateLimit.client")?.getString()?.toInt() ?: 200)
+        )
     )
+    val idempotencyLock = InMemoryIdempotencyLockAdapter()
 
-    val sendNotificationUseCase = SendNotificationUseCase(repository, publisher, rateLimiter)
+    val sendNotificationUseCase = SendNotificationUseCase(repository, rateLimiter, idempotencyLock)
     val queryNotificationStatusUseCase = QueryNotificationStatusUseCase(repository)
     val reprocessDlqUseCase = ReprocessDlqUseCase(repository, publisher)
 
@@ -64,14 +68,29 @@ fun Application.module() {
 
     val meterRegistry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
     install(MicrometerMetrics) { this.registry = meterRegistry }
-
+    
     routing {
         notificationRoutes(sendNotificationUseCase, queryNotificationStatusUseCase, reprocessDlqUseCase)
-        healthRoutes(meterRegistry)
+        healthRoutes(
+            meterRegistry = meterRegistry,
+            dbProbe = {
+                runCatching {
+                    repository.findByStatus(com.echonotify.core.domain.model.NotificationStatus.PENDING, 1)
+                    true
+                }.getOrDefault(false)
+            },
+            kafkaProbe = {
+                runCatching {
+                    adminClient.listTopics().names().get(2, TimeUnit.SECONDS)
+                    true
+                }.getOrDefault(false)
+            }
+        )
     }
     configureOpenApi()
 
     environment.monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
+        adminClient.close()
         producer.close()
         httpClient.close()
     }
