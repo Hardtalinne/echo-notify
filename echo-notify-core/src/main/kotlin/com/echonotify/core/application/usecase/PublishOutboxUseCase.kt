@@ -10,9 +10,11 @@ class PublishOutboxUseCase(
 ) {
     suspend fun execute(limit: Int = 100): Int {
         val pending = repository.fetchPendingOutbox(limit)
+        val notificationsById = repository.findByIds(pending.map { it.notificationId }.toSet())
+
         pending.forEach { event ->
             runCatching {
-                val notification = repository.findById(event.notificationId)
+                val notification = notificationsById[event.notificationId]
                     ?: error("notification not found for outbox ${event.id}")
                 publisher.publish(event.topic, notification)
                 repository.markOutboxPublished(event.id)

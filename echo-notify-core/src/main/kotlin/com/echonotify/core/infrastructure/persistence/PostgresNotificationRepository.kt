@@ -11,6 +11,7 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
 import org.jetbrains.exposed.sql.and
@@ -89,6 +90,20 @@ class PostgresNotificationRepository(
 
     override suspend fun findById(id: UUID): Notification? = newSuspendedTransaction(Dispatchers.IO, database) {
         NotificationTable.selectAll().where { NotificationTable.id eq id }.firstOrNull()?.toDomain()
+    }
+
+    override suspend fun findByIds(ids: Set<UUID>): Map<UUID, Notification> = newSuspendedTransaction(Dispatchers.IO, database) {
+        if (ids.isEmpty()) {
+            return@newSuspendedTransaction emptyMap()
+        }
+
+        NotificationTable
+            .selectAll()
+            .where { NotificationTable.id inList ids }
+            .associate {
+                val notification = it.toDomain()
+                notification.id to notification
+            }
     }
 
     override suspend fun findByIdempotencyKey(key: String): Notification? = newSuspendedTransaction(Dispatchers.IO, database) {

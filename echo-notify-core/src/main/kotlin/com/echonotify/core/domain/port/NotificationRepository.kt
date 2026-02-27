@@ -10,6 +10,7 @@ interface NotificationRepository {
     suspend fun save(notification: Notification): Notification
     suspend fun saveWithOutbox(notification: Notification, topic: String): Notification
     suspend fun findById(id: UUID): Notification?
+    suspend fun findByIds(ids: Set<UUID>): Map<UUID, Notification>
     suspend fun findByIdempotencyKey(key: String): Notification?
     suspend fun findByStatus(status: NotificationStatus, limit: Int = 100): List<Notification>
     suspend fun fetchPendingOutbox(limit: Int = 100): List<OutboxEvent>
