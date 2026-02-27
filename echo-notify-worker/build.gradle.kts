@@ -26,4 +26,5 @@ dependencies {
     implementation(libs.logback.classic)
     implementation(libs.logstash.logback.encoder)
     implementation(libs.opentelemetry.api)
+    implementation(libs.micrometer.registry.prometheus)
 }

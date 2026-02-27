@@ -13,6 +13,11 @@ import com.echonotify.core.infrastructure.messaging.NotificationMessage
 import com.echonotify.core.infrastructure.messaging.toDomain
 import com.echonotify.core.infrastructure.notification.NotificationChannelFactory
 import com.echonotify.core.infrastructure.observability.KafkaTracing
+import com.echonotify.core.infrastructure.observability.NotificationMetrics
+import com.sun.net.httpserver.HttpExchange
+import com.sun.net.httpserver.HttpServer
+import io.micrometer.prometheusmetrics.PrometheusConfig
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -26,6 +31,7 @@ import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 import org.slf4j.LoggerFactory
+import java.net.InetSocketAddress
 import java.time.Duration
 import java.util.UUID
 
@@ -36,6 +42,7 @@ fun main() = runBlocking {
     val bootstrapServers = config.getString("echo-notify.kafka.bootstrapServers")
     val retryGroupId = config.getString("echo-notify.kafka.retryGroupId")
     val dlqGroupId = config.getString("echo-notify.kafka.dlqGroupId")
+    val metricsPort = config.getInt("echo-notify.observability.metricsPort")
     val retryByType = BootstrapFactory.retryPolicyByType(config)
 
     val repository = BootstrapFactory.createRepository(config)
@@ -43,12 +50,16 @@ fun main() = runBlocking {
     val publisher = BootstrapFactory.createPublisher(producer)
     val httpClient = BootstrapFactory.createHttpClient()
     val channels = NotificationChannelFactory.build(httpClient, Json)
+    val meterRegistry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
+    val metrics = NotificationMetrics(meterRegistry)
+    val metricsServer = startMetricsServer(metricsPort, meterRegistry)
 
     val processUseCase = ProcessNotificationUseCase(
         repository = repository,
         registry = NotificationChannelRegistry(channels),
         publisher = publisher,
-        backoffCalculator = BackoffCalculator(retryByType)
+        backoffCalculator = BackoffCalculator(retryByType),
+        metrics = metrics
     )
     val retryUseCase = RetryNotificationUseCase(processUseCase)
     val publishOutboxUseCase = PublishOutboxUseCase(repository, publisher)
@@ -67,6 +78,7 @@ fun main() = runBlocking {
         runCatching { dlqConsumer.close() }
         runCatching { producer.close() }
         runCatching { httpClient.close() }
+        runCatching { metricsServer.stop(0) }
     })
 
     launch {
@@ -111,6 +123,27 @@ fun main() = runBlocking {
             delay(100)
         }
     }.join()
+
+    metricsServer.stop(0)
+}
+
+private fun startMetricsServer(port: Int, meterRegistry: PrometheusMeterRegistry): HttpServer {
+    val server = HttpServer.create(InetSocketAddress(port), 0)
+    server.createContext("/health") { exchange ->
+        respond(exchange, 200, "ok")
+    }
+    server.createContext("/metrics") { exchange ->
+        respond(exchange, 200, meterRegistry.scrape())
+    }
+    server.start()
+    return server
+}
+
+private fun respond(exchange: HttpExchange, status: Int, body: String) {
+    exchange.responseHeaders.add("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+    val bytes = body.toByteArray(Charsets.UTF_8)
+    exchange.sendResponseHeaders(status, bytes.size.toLong())
+    exchange.responseBody.use { output -> output.write(bytes) }
 }
 
 private fun commitRecord(consumer: KafkaConsumer<String, String>, record: ConsumerRecord<String, String>) {

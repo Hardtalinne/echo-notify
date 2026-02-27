@@ -1,7 +1,9 @@
 package com.echonotify.core.application.usecase
 
 import com.echonotify.core.application.config.TopicNames
+import com.echonotify.core.application.port.NoOpNotificationMetrics
 import com.echonotify.core.application.port.NotificationPublisherPort
+import com.echonotify.core.application.port.NotificationMetricsPort
 import com.echonotify.core.application.service.BackoffCalculator
 import com.echonotify.core.application.service.NotificationChannelRegistry
 import com.echonotify.core.domain.model.Notification
@@ -12,9 +14,14 @@ class ProcessNotificationUseCase(
     private val repository: NotificationRepository,
     private val registry: NotificationChannelRegistry,
     private val publisher: NotificationPublisherPort,
-    private val backoffCalculator: BackoffCalculator
+    private val backoffCalculator: BackoffCalculator,
+    private val metrics: NotificationMetricsPort = NoOpNotificationMetrics
 ) {
     suspend fun execute(notification: Notification) {
+        val type = notification.type.name
+        val startedAt = System.nanoTime()
+        metrics.recordSendAttempt(type)
+
         val channel = registry.find(notification.type)
         val result = channel.send(notification)
 
@@ -29,6 +36,12 @@ class ProcessNotificationUseCase(
                     retryable = null,
                     nextRetryAt = null
                 )
+            )
+            metrics.recordSendResult(
+                type = type,
+                outcome = "success",
+                errorCategory = null,
+                durationNanos = System.nanoTime() - startedAt
             )
             return
         }
@@ -49,6 +62,13 @@ class ProcessNotificationUseCase(
                 )
             )
             publisher.publish(TopicNames.DLQ, dlqItem)
+            metrics.recordSendResult(
+                type = type,
+                outcome = "dead_letter",
+                errorCategory = "DELIVERY",
+                durationNanos = System.nanoTime() - startedAt
+            )
+            metrics.recordDeadLettered(type, "DELIVERY")
             return
         }
 
@@ -65,5 +85,12 @@ class ProcessNotificationUseCase(
             )
         )
         publisher.publish(TopicNames.RETRY, retryItem)
+        metrics.recordSendResult(
+            type = type,
+            outcome = "retry",
+            errorCategory = "DELIVERY",
+            durationNanos = System.nanoTime() - startedAt
+        )
+        metrics.recordRetryScheduled(type, "DELIVERY")
     }
 }

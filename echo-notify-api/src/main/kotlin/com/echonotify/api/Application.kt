@@ -5,14 +5,10 @@ import com.echonotify.api.routes.notificationRoutes
 import com.echonotify.core.application.usecase.QueryNotificationStatusUseCase
 import com.echonotify.core.application.usecase.ReprocessDlqUseCase
 import com.echonotify.core.application.usecase.SendNotificationUseCase
-import com.echonotify.core.infrastructure.config.DatabaseFactory
+import com.echonotify.core.infrastructure.bootstrap.BootstrapFactory
 import com.echonotify.core.infrastructure.messaging.KafkaClientFactory
-import com.echonotify.core.infrastructure.messaging.KafkaNotificationPublisher
-import com.echonotify.core.infrastructure.persistence.PostgresNotificationRepository
 import com.echonotify.core.infrastructure.resilience.InMemoryIdempotencyLockAdapter
 import com.echonotify.core.infrastructure.resilience.ResilienceRateLimiterAdapter
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -25,31 +21,23 @@ import io.ktor.server.routing.routing
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import kotlinx.serialization.json.Json
+import com.typesafe.config.Config
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.AdminClientConfig
-import org.apache.kafka.clients.producer.KafkaProducer
 import java.util.concurrent.TimeUnit
 
 fun Application.module() {
-    val config = environment.config
-
-    val jdbcUrl = config.property("echo-notify.database.url").getString()
-    val dbUser = config.property("echo-notify.database.user").getString()
-    val dbPass = config.property("echo-notify.database.password").getString()
-    val bootstrapServers = config.property("echo-notify.kafka.bootstrapServers").getString()
-    val database = DatabaseFactory.create(jdbcUrl, dbUser, dbPass)
-    val repository = PostgresNotificationRepository(database)
-
-    val producer = KafkaProducer<String, String>(KafkaClientFactory.producerProps(bootstrapServers))
+    val config = com.typesafe.config.ConfigFactory.load()
+    val bootstrapServers = config.getString("echo-notify.kafka.bootstrapServers")
+    val repository = BootstrapFactory.createRepository(config)
+    val producer = BootstrapFactory.createProducer(config)
     val adminClient = AdminClient.create(mapOf(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers))
-    val httpClient = HttpClient(CIO)
-
-    val publisher = KafkaNotificationPublisher(producer)
+    val publisher = BootstrapFactory.createPublisher(producer)
     val rateLimiter = ResilienceRateLimiterAdapter(
         limitPerSecondByPrefix = mapOf(
-            "type" to (config.propertyOrNull("echo-notify.rateLimit.type")?.getString()?.toInt() ?: 100),
-            "recipient" to (config.propertyOrNull("echo-notify.rateLimit.recipient")?.getString()?.toInt() ?: 60),
-            "client" to (config.propertyOrNull("echo-notify.rateLimit.client")?.getString()?.toInt() ?: 200)
+            "type" to config.getIntOrDefault("echo-notify.rateLimit.type", 100),
+            "recipient" to config.getIntOrDefault("echo-notify.rateLimit.recipient", 60),
+            "client" to config.getIntOrDefault("echo-notify.rateLimit.client", 200)
         )
     )
     val idempotencyLock = InMemoryIdempotencyLockAdapter()
@@ -92,6 +80,9 @@ fun Application.module() {
     environment.monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
         adminClient.close()
         producer.close()
-        httpClient.close()
     }
+}
+
+private fun Config.getIntOrDefault(path: String, defaultValue: Int): Int {
+    return if (hasPath(path)) getInt(path) else defaultValue
 }

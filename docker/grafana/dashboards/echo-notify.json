@@ -6,7 +6,16 @@
       "title": "Send Total",
       "targets": [
         {
-          "expr": "echo_notify_send_total"
+          "expr": "sum(echo_notify_send_total)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Send Total by Type",
+      "targets": [
+        {
+          "expr": "sum by (type) (echo_notify_send_total{outcome=\"success\"})"
         }
       ]
     },
@@ -15,7 +24,16 @@
       "title": "Retry Total",
       "targets": [
         {
-          "expr": "echo_notify_retry_total"
+          "expr": "sum(echo_notify_retry_total)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Retry Total by Type",
+      "targets": [
+        {
+          "expr": "sum by (type) (echo_notify_retry_total)"
         }
       ]
     },
@@ -24,7 +42,34 @@
       "title": "DLQ Total",
       "targets": [
         {
-          "expr": "echo_notify_dlq_total"
+          "expr": "sum(echo_notify_dlq_total)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "DLQ by Error Category",
+      "targets": [
+        {
+          "expr": "sum by (error_category) (echo_notify_dlq_total)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Error Total by Category",
+      "targets": [
+        {
+          "expr": "sum by (error_category) (echo_notify_error_total)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Send Latency P95 by Type",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, type) (rate(echo_notify_send_latency_seconds_bucket[5m])))"
         }
       ]
     },

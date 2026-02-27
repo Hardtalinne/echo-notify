@@ -6,3 +6,13 @@ scrape_configs:
     static_configs:
       - targets: ["echo-notify-api:8080"]
     metrics_path: /metrics
+
+  - job_name: echo-notify-consumer
+    static_configs:
+      - targets: ["echo-notify-consumer:8081"]
+    metrics_path: /metrics
+
+  - job_name: echo-notify-worker
+    static_configs:
+      - targets: ["echo-notify-worker:8082"]
+    metrics_path: /metrics
