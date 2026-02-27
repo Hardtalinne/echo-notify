@@ -1,0 +1,45 @@
+openapi: 3.0.3
+info:
+  title: Echo Notify API
+  version: 0.1.0
+paths:
+  /v1/notifications:
+    post:
+      summary: Create notification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            examples:
+              email:
+                value:
+                  type: EMAIL
+                  recipient: user@example.com
+                  clientId: billing-service
+                  payload: "{\"subject\":\"Fatura\",\"body\":\"Sua fatura\",\"from\":\"no-reply@echo.com\"}"
+                  idempotencyKey: billing-123
+              webhook:
+                value:
+                  type: WEBHOOK
+                  recipient: https://client.example.com/hook
+                  clientId: checkout-service
+                  payload: "{\"url\":\"https://client.example.com/hook\",\"body\":\"{\\\"event\\\":\\\"paid\\\"}\"}"
+                  idempotencyKey: checkout-123
+      responses:
+        '202':
+          description: Accepted
+  /v1/notifications/{id}:
+    get:
+      summary: Get notification status
+      responses:
+        '200':
+          description: Notification status
+  /v1/notifications/dlq/reprocess:
+    post:
+      summary: Reprocess dead-letter notifications
+      responses:
+        '200':
+          description: Reprocessed
+  /health:
+    get:
+      summary: Liveness
