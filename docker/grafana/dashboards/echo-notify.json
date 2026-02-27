@@ -75,6 +75,27 @@
     },
     {
       "type": "timeseries",
+      "title": "SLO Target (P95 <= 2s)",
+      "targets": [
+        {
+          "expr": "2"
+        },
+        {
+          "expr": "max(histogram_quantile(0.95, sum by (le, type) (rate(echo_notify_send_latency_seconds_bucket[5m]))))"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "P95 SLO Breach Ratio (5m)",
+      "targets": [
+        {
+          "expr": "max(histogram_quantile(0.95, sum by (le, type) (rate(echo_notify_send_latency_seconds_bucket[5m])))) / 2"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
       "title": "Consumer Group Lag",
       "targets": [
         {

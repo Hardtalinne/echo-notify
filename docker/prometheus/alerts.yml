@@ -1,0 +1,22 @@
+groups:
+  - name: echo-notify-alerts
+    rules:
+      - alert: EchoNotifyErrorCategorySpike
+        expr: sum by (error_category) (increase(echo_notify_error_total[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: echo-notify
+        annotations:
+          summary: "Spike de erros por categoria"
+          description: "Categoria {{ $labels.error_category }} teve aumento acima do limite em 5 minutos."
+
+      - alert: EchoNotifyP95LatencyHigh
+        expr: histogram_quantile(0.95, sum by (le, type) (rate(echo_notify_send_latency_seconds_bucket[5m]))) > 2
+        for: 10m
+        labels:
+          severity: critical
+          service: echo-notify
+        annotations:
+          summary: "Latência p95 alta por tipo"
+          description: "Latência p95 de envio acima de 2s para tipo {{ $labels.type }} por mais de 10 minutos."
