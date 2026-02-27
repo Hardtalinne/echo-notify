@@ -27,6 +27,24 @@
           "expr": "echo_notify_dlq_total"
         }
       ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Consumer Group Lag",
+      "targets": [
+        {
+          "expr": "kafka_consumergroup_lag"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Records Lag Max",
+      "targets": [
+        {
+          "expr": "kafka_consumer_fetch_manager_records_lag_max"
+        }
+      ]
     }
   ],
   "schemaVersion": 39,

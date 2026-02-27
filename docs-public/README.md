@@ -20,7 +20,11 @@ curl -X POST http://localhost:8080/v1/notifications \
     "type":"EMAIL",
     "recipient":"user@example.com",
     "clientId":"billing-service",
-    "payload":"{\"subject\":\"Invoice\",\"body\":\"Hello\",\"from\":\"no-reply@echo.com\"}",
+    "payload":{
+      "subject":"Invoice",
+      "body":"Hello",
+      "from":"no-reply@echo.com"
+    },
     "idempotencyKey":"invoice-1001"
   }'
 ```

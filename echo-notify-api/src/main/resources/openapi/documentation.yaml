@@ -16,14 +16,19 @@ paths:
                   type: EMAIL
                   recipient: user@example.com
                   clientId: billing-service
-                  payload: "{\"subject\":\"Fatura\",\"body\":\"Sua fatura\",\"from\":\"no-reply@echo.com\"}"
+                  payload:
+                    subject: Fatura
+                    body: Sua fatura
+                    from: no-reply@echo.com
                   idempotencyKey: billing-123
               webhook:
                 value:
                   type: WEBHOOK
                   recipient: https://client.example.com/hook
                   clientId: checkout-service
-                  payload: "{\"url\":\"https://client.example.com/hook\",\"body\":\"{\\\"event\\\":\\\"paid\\\"}\"}"
+                  payload:
+                    url: https://client.example.com/hook
+                    body: '{"event":"paid"}'
                   idempotencyKey: checkout-123
       responses:
         '202':

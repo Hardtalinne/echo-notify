@@ -13,10 +13,8 @@ import com.echonotify.core.infrastructure.messaging.KafkaClientFactory
 import com.echonotify.core.infrastructure.messaging.KafkaNotificationPublisher
 import com.echonotify.core.infrastructure.messaging.NotificationMessage
 import com.echonotify.core.infrastructure.messaging.toDomain
-import com.echonotify.core.infrastructure.notification.email.EmailNotificationChannel
-import com.echonotify.core.infrastructure.notification.webhook.WebhookNotificationChannel
+import com.echonotify.core.infrastructure.notification.NotificationChannelFactory
 import com.echonotify.core.infrastructure.persistence.PostgresNotificationRepository
-import com.echonotify.core.infrastructure.resilience.CircuitBreakerNotificationChannel
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.runBlocking
@@ -58,10 +56,7 @@ fun main() = runBlocking {
     val publisher = KafkaNotificationPublisher(producer)
     val httpClient = HttpClient(CIO)
 
-    val channels = listOf(
-        CircuitBreakerNotificationChannel(EmailNotificationChannel(Json)),
-        CircuitBreakerNotificationChannel(WebhookNotificationChannel(httpClient, Json))
-    )
+    val channels = NotificationChannelFactory.build(httpClient, Json)
 
     val useCase = ProcessNotificationUseCase(
         repository = repository,

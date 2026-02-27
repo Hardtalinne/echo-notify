@@ -68,7 +68,7 @@ fun Application.module() {
 
     val meterRegistry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
     install(MicrometerMetrics) { this.registry = meterRegistry }
-    
+
     routing {
         notificationRoutes(sendNotificationUseCase, queryNotificationStatusUseCase, reprocessDlqUseCase)
         healthRoutes(

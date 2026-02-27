@@ -2,7 +2,10 @@ package com.echonotify.api.routes
 
 import com.echonotify.api.dto.CreateNotificationRequest
 import com.echonotify.api.dto.CreateNotificationResponse
+import com.echonotify.api.dto.EmailPayloadContract
 import com.echonotify.api.dto.NotificationStatusResponse
+import com.echonotify.api.dto.NotificationPayloadContract
+import com.echonotify.api.dto.WebhookPayloadContract
 import com.echonotify.core.application.usecase.CreateNotificationCommand
 import com.echonotify.core.application.usecase.QueryNotificationStatusUseCase
 import com.echonotify.core.application.usecase.ReprocessDlqUseCase
@@ -16,6 +19,8 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.util.UUID
 
 fun Route.notificationRoutes(
@@ -26,12 +31,18 @@ fun Route.notificationRoutes(
     route("/v1/notifications") {
         post {
             val request = call.receive<CreateNotificationRequest>()
+            val type = NotificationType.valueOf(request.type.uppercase())
+            val payloadContract: NotificationPayloadContract = when (type) {
+                NotificationType.EMAIL -> Json.decodeFromString<EmailPayloadContract>(request.payload.toString())
+                NotificationType.WEBHOOK -> Json.decodeFromString<WebhookPayloadContract>(request.payload.toString())
+            }
+
             val created = sendNotificationUseCase.execute(
                 CreateNotificationCommand(
-                    type = NotificationType.valueOf(request.type.uppercase()),
+                    type = type,
                     recipient = request.recipient,
                     clientId = request.clientId,
-                    payload = request.payload,
+                    payload = Json.encodeToString(payloadContract),
                     idempotencyKey = request.idempotencyKey
                 )
             )
