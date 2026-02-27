@@ -23,6 +23,7 @@ dependencies {
     implementation(libs.opentelemetry.api)
 
     implementation(libs.logback.classic)
+    implementation("com.typesafe:config:1.4.3")
 
     testImplementation(libs.testcontainers.junit)
     testImplementation(libs.testcontainers.postgresql)
