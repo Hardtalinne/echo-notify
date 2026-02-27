@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: echo-notify-api
+    static_configs:
+      - targets: ["echo-notify-api:8080"]
+    metrics_path: /metrics

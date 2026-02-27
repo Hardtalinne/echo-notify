@@ -1,0 +1,34 @@
+{
+  "title": "Echo Notify",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Send Total",
+      "targets": [
+        {
+          "expr": "echo_notify_send_total"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Retry Total",
+      "targets": [
+        {
+          "expr": "echo_notify_retry_total"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "DLQ Total",
+      "targets": [
+        {
+          "expr": "echo_notify_dlq_total"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}
