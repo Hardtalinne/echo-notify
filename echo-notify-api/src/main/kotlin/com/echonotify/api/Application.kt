@@ -2,6 +2,7 @@ package com.echonotify.api
 
 import com.echonotify.api.routes.healthRoutes
 import com.echonotify.api.routes.notificationRoutes
+import com.echonotify.api.security.ApiSecurity
 import com.echonotify.core.application.usecase.QueryNotificationStatusUseCase
 import com.echonotify.core.application.usecase.ReprocessDlqUseCase
 import com.echonotify.core.application.usecase.SendNotificationUseCase
@@ -33,6 +34,7 @@ fun Application.module() {
     val producer = BootstrapFactory.createProducer(config)
     val adminClient = AdminClient.create(mapOf(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers))
     val publisher = BootstrapFactory.createPublisher(producer)
+    val apiSecurity = ApiSecurity(config)
     val rateLimiter = ResilienceRateLimiterAdapter(
         limitPerSecondByPrefix = mapOf(
             "type" to config.getIntOrDefault("echo-notify.rateLimit.type", 100),
@@ -58,7 +60,7 @@ fun Application.module() {
     install(MicrometerMetrics) { this.registry = meterRegistry }
 
     routing {
-        notificationRoutes(sendNotificationUseCase, queryNotificationStatusUseCase, reprocessDlqUseCase)
+        notificationRoutes(sendNotificationUseCase, queryNotificationStatusUseCase, reprocessDlqUseCase, apiSecurity)
         healthRoutes(
             meterRegistry = meterRegistry,
             dbProbe = {
