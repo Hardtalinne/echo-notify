@@ -7,6 +7,7 @@
 - Domain: entities, ports and strategies
 - Infrastructure: Kafka, PostgreSQL/Flyway, channel adapters, resilience adapters
 - Async processing: `echo-notify-consumer` + `echo-notify-worker`
+- Observability: W3C trace context propagated in Kafka headers and continued in consumer/worker spans
 
 ## Visual suggestion
 
@@ -29,6 +30,7 @@ flowchart TD
 
   subgraph Infra
     D1[(PostgreSQL)]
+    D6[(Outbox Table)]
     D2[[Kafka Topics]]
     D3[Prometheus]
     D4[Grafana]
@@ -39,6 +41,8 @@ flowchart TD
   B2 --> B1
   B2 --> B3
   B3 --> D1
+  B3 --> D6
+  D6 --> C2
   B3 --> D2
   C1 --> B2
   C2 --> B2

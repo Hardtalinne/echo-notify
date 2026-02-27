@@ -10,6 +10,7 @@ import com.echonotify.core.infrastructure.messaging.KafkaClientFactory
 import com.echonotify.core.infrastructure.messaging.NotificationMessage
 import com.echonotify.core.infrastructure.messaging.toDomain
 import com.echonotify.core.infrastructure.notification.NotificationChannelFactory
+import com.echonotify.core.infrastructure.observability.KafkaTracing
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.SerializationException
@@ -65,12 +66,10 @@ fun main() = runBlocking {
             val records = kafkaConsumer.poll(Duration.ofMillis(500))
             for (record in records) {
                 try {
-                    val traceparent = record.headers().lastHeader("traceparent")?.value()?.toString(Charsets.UTF_8)
-                    if (!traceparent.isNullOrBlank()) {
-                        log.debug("Processing record with traceparent={}", traceparent)
+                    KafkaTracing.withConsumerSpan(record.headers(), "kafka.consume.send") {
+                        val message = Json.decodeFromString<NotificationMessage>(record.value())
+                        useCase.execute(message.toDomain())
                     }
-                    val message = Json.decodeFromString<NotificationMessage>(record.value())
-                    useCase.execute(message.toDomain())
                     commitRecord(kafkaConsumer, record)
                 } catch (ex: SerializationException) {
                     publishParseErrorToDlq(producer, record)
@@ -108,4 +107,3 @@ private fun publishParseErrorToDlq(producer: KafkaProducer<String, String>, reco
     )
     producer.send(ProducerRecord(TopicNames.DLQ, UUID.randomUUID().toString(), payload)).get()
 }
-

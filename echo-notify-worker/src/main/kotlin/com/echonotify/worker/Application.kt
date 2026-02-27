@@ -12,6 +12,7 @@ import com.echonotify.core.infrastructure.messaging.KafkaClientFactory
 import com.echonotify.core.infrastructure.messaging.NotificationMessage
 import com.echonotify.core.infrastructure.messaging.toDomain
 import com.echonotify.core.infrastructure.notification.NotificationChannelFactory
+import com.echonotify.core.infrastructure.observability.KafkaTracing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -81,12 +82,10 @@ fun main() = runBlocking {
             val records = retryConsumer.poll(Duration.ofMillis(500))
             for (record in records) {
                 try {
-                    val traceparent = record.headers().lastHeader("traceparent")?.value()?.toString(Charsets.UTF_8)
-                    if (!traceparent.isNullOrBlank()) {
-                        log.debug("Processing retry record with traceparent={}", traceparent)
+                    KafkaTracing.withConsumerSpan(record.headers(), "kafka.consume.retry") {
+                        val message = Json.decodeFromString<NotificationMessage>(record.value())
+                        retryUseCase.execute(message.toDomain())
                     }
-                    val message = Json.decodeFromString<NotificationMessage>(record.value())
-                    retryUseCase.execute(message.toDomain())
                     commitRecord(retryConsumer, record)
                 } catch (ex: SerializationException) {
                     publishParseErrorToDlq(producer, record)
@@ -104,7 +103,9 @@ fun main() = runBlocking {
         while (true) {
             val records = dlqConsumer.poll(Duration.ofMillis(500))
             for (record in records) {
-                log.warn("DLQ notification received id={} payload={}", record.key(), record.value())
+                KafkaTracing.withConsumerSpan(record.headers(), "kafka.consume.dlq") {
+                    log.warn("DLQ notification received id={} payload={}", record.key(), record.value())
+                }
                 commitRecord(dlqConsumer, record)
             }
             delay(100)
@@ -130,4 +131,3 @@ private fun publishParseErrorToDlq(producer: KafkaProducer<String, String>, reco
     )
     producer.send(ProducerRecord(TopicNames.DLQ, UUID.randomUUID().toString(), payload)).get()
 }
-
